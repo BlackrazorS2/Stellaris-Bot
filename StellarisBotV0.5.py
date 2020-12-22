@@ -20,7 +20,7 @@ from zipfile import ZipFile
 #   implement channel creation for federations
 
 
-TOKEN = "NzkwNjYxOTU0MzcyMjM5NDU4.X-D3Uw.gnXoaTqcHMbsrxqjIToKZCfYuZY"
+TOKEN = "TOKEN"
 intents = discord.Intents.default()
 intents.members = True
 client = commands.Bot(command_prefix='!', intents=intents) # command prefix is >>
@@ -186,11 +186,7 @@ class saveProcessing:
 saveData = saveProcessing()
 
 async def assignRoles():
-    print(f"name dictionary: {names}\n")
-    print(f"empireData {saveData.empireData}\n")
-    print(f"fedData {saveData.fedData}\n")
-    print(f"council {saveData.council}\n")
-    print(discGuild)
+
     server = client.get_guild(discGuild)
     print(server)
     for player in names.keys():
