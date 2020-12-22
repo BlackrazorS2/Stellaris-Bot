@@ -81,7 +81,7 @@ class saveProcessing:
                     self.empireData[playerName] = [countryCode]
 
 
-            elif "country={" in line: # start grabbing that empire data
+            elif "flag={" in line: # start grabbing that empire data country={
                 # grab name, color, and number
                 state = "country"
             elif "tech_status=" in line: # strop grabbing that empire data
@@ -186,7 +186,7 @@ class saveProcessing:
 saveData = saveProcessing()
 
 async def assignRoles():
-
+    print(saveData.empireData)
     server = client.get_guild(discGuild)
     print(server)
     for player in names.keys():
@@ -234,6 +234,47 @@ async def assignRoles():
                     role = await server.create_role(name="Galactic Council")
                     await member.add_roles(role)
 
+async def createChannels():
+
+    server = client.get_guild(discGuild)
+    for cat in server.categories:
+        print(cat.name)
+        if cat.name == "Federations":
+            category = cat
+            break
+        else:
+            category = None
+    if category == None: 
+        category = await server.create_category("Federations")
+    # permissions for channels
+    textOverwrites = {
+        server.default_role: discord.PermissionOverwrite(read_messages=False, view_channel=False)
+    }
+    voiceOverwrites = {
+        server.default_role: discord.PermissionOverwrite(view_channel=True, connect=False)
+    }
+    # creating text
+    for federation in saveData.fedData.keys():
+        role = get(server.roles, name=federation)
+        if role: # see if role for federation exists, if no, then no one is in it and it doesn't 
+            creation = True
+            for channel in category.channels:
+                if channel.name.lower() == federation.lower():
+                    creation = False
+                else:
+                    continue
+            if creation:
+                textOverwrites[role] = discord.PermissionOverwrite(read_messages=True, view_channel=True, read_message_history=True, send_messages=True)
+                await server.create_text_channel(federation, overwrites=textOverwrites, category=category)
+                voiceOverwrites[role] = discord.PermissionOverwrite(connect=True)
+                await server.create_voice_channel(federation, overwrites=voiceOverwrites, category=category)
+                textOverwrites.pop(role, None)
+                voiceOverwrites.pop(role, None)
+            else:
+                pass
+        else:
+            continue
+
 async def observer():
     """looks at files in a directory and slects the latest file for parsing"""
     await client.wait_until_ready()
@@ -251,6 +292,8 @@ async def observer():
             print("processed")
             await assignRoles()
             print("roles assigned!")
+            await createChannels()
+            print("channels created!")
             await asyncio.sleep(10) # waits every 5 minutes
         else:
             print("path is currently none \n")
