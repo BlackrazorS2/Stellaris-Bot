@@ -14,12 +14,13 @@ import discord
 from discord.ext import commands
 from discord.utils import get
 import asyncio
-import py7zr
-# need to install and add support for watchdogs which can run commands on file update
+from zipfile import ZipFile
+#To do:
+#
+#   implement channel creation for federations
 
-#class metadata:
-#    def __init__(self):
-TOKEN = "TOKEN"
+
+TOKEN = "NzkwNjYxOTU0MzcyMjM5NDU4.X-D3Uw.gnXoaTqcHMbsrxqjIToKZCfYuZY"
 intents = discord.Intents.default()
 intents.members = True
 client = commands.Bot(command_prefix='!', intents=intents) # command prefix is >>
@@ -27,30 +28,29 @@ client.remove_command('help') # removes the default help command to replace it w
 names = {}
 discGuild = None
 
+
 class saveProcessing:
     def __init__(self):
-        self.saveLoc = "C:\\user\\documents\\paradox interactive\\stellaris\\save games\\savefolder"
-        self.saveFile = f"{self.saveLoc}\\latest.sav"
+        self.path = None
+        #self.saveFile = None#f"{self.path}/latest.sav"
         self.empireData = {}
         self.fedData = {}
         self.council = []
         self.lines = None
-    def updateFile(self):
-        # not sure if this needs to exist or what it is for
-        pass
-    def unzip(self, location):
+    async def unzip(self, location):
         #unzips the save file and parses the contents of gamedata into lines
-        save = py7zr.SevenZipFile(self.saveFile)
-        save.extractall()
-        save.close()
-        with open("gamedata", "r") as gamedata:
-            self.lines = gamedata.readlines()
+        with ZipFile(location, "r") as zipObj:
+            zipObj.extractall()
+        #backPath = location[:location.rfind("/")]
+        with open(f"gamestate", "r") as gamestate:
+            self.lines = gamestate.readlines()
         # cleaning up
-        os.remove("gamedata")
+        os.remove("gamestate")
         os.remove("meta")
+        return None
     
 
-    def process(self):
+    async def process(self):
         """Simplifying having 5 million functions and iterating through it all in each of them. Only one iteration here"""
         # note that I can probably stop recording data much earlier in many of these
         # use mp metal and mp yang for testing right now
@@ -60,14 +60,24 @@ class saveProcessing:
         #   council = [members]
         state = None
         for i, line in enumerate(self.lines):
+
             if "player={" in line: # start grabbing players and their respective countries
                 state = "players"
             elif "tick=" in line: # stop recording players 
                 state = None
             elif state == "players":
                 if "name=" in line:
-                    playerName = line.strip("\n", '"', "name=")
-                    countryCode = self.lines[i+1].strip("\n", "country=")
+                    playerName = line.strip('\n\tname=')
+                    playerName = playerName.strip('"')
+                    #playerName = line.strip('\n')
+                    #playerName = playerName.strip("\t")
+                    #playerName = playerName.strip('"')
+                    #playerName = playerName.strip("name=")
+                    #countryCode = self.lines[i+1]
+                    countryCode = self.lines[i+1].strip("\n\tcountry=")
+                    #countryCode = countryCode.strip("country=")
+                    #countryCode = countryCode.strip("\n")
+                    #countryCode = countryCode.strip("\t")
                     self.empireData[playerName] = [countryCode]
 
 
@@ -79,7 +89,12 @@ class saveProcessing:
             
             elif state == "country":
                 if "colors={" in line:
-                    color = self.lines[i+1].strip("\n", '"')
+                    color = self.lines[i+1].strip("\n\t")
+                    color = color.strip('"')
+                    #color = self.lines[i+1].strip('\t')
+                    #color = color.strip('"')
+                    #color = color.strip('\n')
+                    #color = color.strip('"')
                     # resolve color naming to predesignated rgb values
                     # python really needs a switch case
                     if color == "dark_brown":
@@ -125,9 +140,19 @@ class saveProcessing:
                         discColor = discord.Color.darker_grey()
                     else: # default color
                         discColor = discord.Color.greyple()
-                    countryName = self.lines[i+8].strip("\n", '"')
-                    self.empireData[playerName].append(discColor)
-                    self.empireData[playerName].append(countryName)
+                    countryName = self.lines[i+8].strip("\n\tname=")
+                    countryName = countryName.strip('"')
+                    #countryName = self.lines[i+8].strip('\n')#strip("\n", '"')
+                    #countryName = countryName.strip("\t")
+                    #countryName = countryName.strip('"')
+                    emp = self.lines[i-10].strip("\n\t={")
+                    for player in self.empireData.keys():
+                        if emp == self.empireData[player][0]:
+                            self.empireData[player].append(discColor)
+                            self.empireData[player].append(countryName)
+                            break
+                        else:
+                            pass
 
 
             elif "federation={" in line: # start grabbing federation data
@@ -137,9 +162,15 @@ class saveProcessing:
 
             elif state == "federation":
                 if "name=" in line:
-                    fedName = line.strip("\n", "name=", '"')
+                    fedName = line.strip("\n\tname=")
+                    fedName = fedName.strip('"')
+                    #fedName = line.strip('\t')
+                    #fedName = fedName.strip('name=')#("\n", "name=", '"')
+                    #fedName = fedName.strip('"')
                 elif "members={" in line:
-                    memberString = line[i+1].strip("\n")
+                    memberString = self.lines[i+1].strip("\n\t")
+                    #memberString = self.lines[i+1].strip("\t")
+                    #memberString = memberString.strip("\n")
                     memberList = memberString.split() # gives list of members(if string was "10 3 4 5" it would output ['10','3','4','5'])
                     self.fedData[fedName] = memberList # this should(tm) work
     
@@ -148,68 +179,111 @@ class saveProcessing:
                 council_String = self.lines[i+5]
                 council_List = council_String.split()
                 self.council = council_List
+        print("done processing")
+
+
 
 saveData = saveProcessing()
+
+async def assignRoles():
+    print(f"name dictionary: {names}\n")
+    print(f"empireData {saveData.empireData}\n")
+    print(f"fedData {saveData.fedData}\n")
+    print(f"council {saveData.council}\n")
+    print(discGuild)
+    server = client.get_guild(discGuild)
+    print(server)
+    for player in names.keys():
+        if player in saveData.empireData:
+            print("player is in empireData")
+            member = server.get_member(names[player])
+            roleExist = get(server.roles, name=saveData.empireData[player][2])
+            if roleExist:
+                print("role already exists!")
+                if roleExist in member.roles:
+                    print("member has role, passing")
+                    pass
+                else:
+                    print("member did not have role, adding")
+                    await member.add_roles(roleExist)
+            else:
+                print("making new role")
+                role = await server.create_role(name=saveData.empireData[player][2], color=saveData.empireData[player][1])
+                await member.add_roles(role)
+                print("role added")
+            for federation in saveData.fedData.keys():
+                if saveData.empireData[player][0] in saveData.fedData[federation]:
+                    print("player is also in federation!")
+                    roleExist = get(server.roles, name=federation)
+                    if roleExist:
+                        print("role already exists!")
+                        if roleExist in member.roles:
+                            print("member already had role, passing")
+                            pass
+                        else:
+                            print("member did not have role, adding")
+                            await member.add_roles(get(server.roles, name=federation))
+                    else:
+                        print("making new federation role")
+                        role = await server.create_role(name=federation)
+                        await member.add_roles(role)
+            if saveData.empireData[player][0] in saveData.council:
+                roleExist = get(server.roles, name="Galactic Council")
+                if roleExist:
+                    if roleExist in member.roles:
+                        pass
+                    else:
+                        await member.add_roles(get(server.roles, name="Galactic Council"))
+                else:
+                    role = await server.create_role(name="Galactic Council")
+                    await member.add_roles(role)
+
+async def observer():
+    """looks at files in a directory and slects the latest file for parsing"""
+    await client.wait_until_ready()
+    while True:
+        print(names)
+        if saveData.path != None:
+            files = os.listdir(saveData.path)
+            paths = [os.path.join(saveData.path, basename) for basename in files]
+            latest = max(paths, key=os.path.getctime)
+            #latest.replace("\\", "/")
+            print(f"\n Latest is {latest} \n")
+            await saveData.unzip(latest)
+            print("unzipped!")
+            await saveData.process()
+            print("processed")
+            await assignRoles()
+            print("roles assigned!")
+            await asyncio.sleep(10) # waits every 5 minutes
+        else:
+            print("path is currently none \n")
+            await asyncio.sleep(10)
 
 @client.command()
 async def iam(ctx, steamName):
     discID = ctx.message.author.id # defines the id of the sender
+    # need to check to make sure people don't screw up
     names[steamName] = discID
     await ctx.send("Steam name applied!")
 
 @client.command()
 async def selectSave(ctx, directory):
     """Takes the abosulte file path to the folder containing the save files of selected stellaris game"""
-    saveData.saveLoc = directory
-    discGuild = ctx.guild
+    global discGuild
+    saveData.path = directory
+    discGuild = ctx.guild.id
+    print(discGuild)
     await ctx.send(f"Watching directory {directory} for new saves!")
+    # start observer
 
 @client.command()
 async def victoryScreen(ctx):
     """would just display the victory screen as an embed"""
     pass
 
-
-
-async def assignRoles():
-    for player in names.keys():
-        if player in saveData.empireData:
-            member = discGuild.get_member(names[player])
-            roleExist = get(discGuild.roles, name=saveData.empireData[player][2])
-            if roleExist:
-                if roleExist in member.roles:
-                    pass
-                else:
-                    member.add_roles(roleExist)
-            else:
-                role = discGuild.create_role(name=saveData.empireData[player][2], color=saveData.empireData[player][1])
-                member.add_roles(role)
-            for federation in saveData.fedData.keys():
-                if saveData.empireData[player][0] in saveData.fedData[federation]:
-                    roleExist = get(discGuild.roles, name=federation)
-                    if roleExist:
-                        if roleExist in member.roles:
-                            pass
-                        else:
-                            member.add_roles(get(discGuild.roles, name=federation))
-                    else:
-                        role = discGuild.create_role(name=federation)
-                        member.add_roles(role)
-            if saveData.empireData[player][0] in saveData.council:
-                roleExist = get(discGuild.roles, name="Galactic Council")
-                if roleExist:
-                    if roleExist in member.roles:
-                        pass
-                    else:
-                        member.add_roles(get(discGuild.roles, name="Galactic Council"))
-                else:
-                    role = discGuild.create_role(name="Galactic Council")
-                    member.add_roles(role)
-                        
-#function watcher
-# when new save file
-# run all the unpacking and gets
-# run assignRoles
-
+if __name__ == "__main__":
+    client.loop.create_task(observer())
+    client.run(TOKEN)
 
 
