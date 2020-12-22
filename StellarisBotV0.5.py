@@ -19,15 +19,22 @@ from zipfile import ZipFile
 #
 #   implement channel creation for federations
 
-
-TOKEN = "TOKEN"
+with open("token.json", "r") as foo:
+    TOKEN = json.loads(foo)
 intents = discord.Intents.default()
 intents.members = True
 client = commands.Bot(command_prefix='!', intents=intents) # command prefix is >>
 client.remove_command('help') # removes the default help command to replace it with a custom one
-names = {}
-discGuild = None
 
+if not os.path.exists("users.json"):
+    with open("users.json", "w") as f:
+        data = {}
+        json.dump(data,f)
+        discGuild = data
+else:
+    with open("users.json", "r") as f:
+        names = json.load(f)
+discGuild = None
 
 class saveProcessing:
     def __init__(self):
@@ -52,12 +59,6 @@ class saveProcessing:
 
     async def process(self):
         """Simplifying having 5 million functions and iterating through it all in each of them. Only one iteration here"""
-        # note that I can probably stop recording data much earlier in many of these
-        # use mp metal and mp yang for testing right now
-        # output should be two dictionaries and a list:
-        #   empireData = {playername: [countrycode, color, countryname]}
-        #   fedData = {fedname: [members]}
-        #   council = [members]
         state = None
         for i, line in enumerate(self.lines):
 
@@ -69,15 +70,9 @@ class saveProcessing:
                 if "name=" in line:
                     playerName = line.strip('\n\tname=')
                     playerName = playerName.strip('"')
-                    #playerName = line.strip('\n')
-                    #playerName = playerName.strip("\t")
-                    #playerName = playerName.strip('"')
-                    #playerName = playerName.strip("name=")
-                    #countryCode = self.lines[i+1]
+
                     countryCode = self.lines[i+1].strip("\n\tcountry=")
-                    #countryCode = countryCode.strip("country=")
-                    #countryCode = countryCode.strip("\n")
-                    #countryCode = countryCode.strip("\t")
+
                     self.empireData[playerName] = [countryCode]
 
 
@@ -91,10 +86,7 @@ class saveProcessing:
                 if "colors={" in line:
                     color = self.lines[i+1].strip("\n\t")
                     color = color.strip('"')
-                    #color = self.lines[i+1].strip('\t')
-                    #color = color.strip('"')
-                    #color = color.strip('\n')
-                    #color = color.strip('"')
+
                     # resolve color naming to predesignated rgb values
                     # python really needs a switch case
                     if color == "dark_brown":
@@ -142,9 +134,6 @@ class saveProcessing:
                         discColor = discord.Color.greyple()
                     countryName = self.lines[i+8].strip("\n\tname=")
                     countryName = countryName.strip('"')
-                    #countryName = self.lines[i+8].strip('\n')#strip("\n", '"')
-                    #countryName = countryName.strip("\t")
-                    #countryName = countryName.strip('"')
                     emp = self.lines[i-10].strip("\n\t={")
                     for player in self.empireData.keys():
                         if emp == self.empireData[player][0]:
@@ -164,13 +153,10 @@ class saveProcessing:
                 if "name=" in line:
                     fedName = line.strip("\n\tname=")
                     fedName = fedName.strip('"')
-                    #fedName = line.strip('\t')
-                    #fedName = fedName.strip('name=')#("\n", "name=", '"')
-                    #fedName = fedName.strip('"')
+
                 elif "members={" in line:
                     memberString = self.lines[i+1].strip("\n\t")
-                    #memberString = self.lines[i+1].strip("\t")
-                    #memberString = memberString.strip("\n")
+
                     memberList = memberString.split() # gives list of members(if string was "10 3 4 5" it would output ['10','3','4','5'])
                     self.fedData[fedName] = memberList # this should(tm) work
     
@@ -186,41 +172,28 @@ class saveProcessing:
 saveData = saveProcessing()
 
 async def assignRoles():
-    print(saveData.empireData)
     server = client.get_guild(discGuild)
-    print(server)
     for player in names.keys():
         if player in saveData.empireData:
-            print("player is in empireData")
             member = server.get_member(names[player])
             roleExist = get(server.roles, name=saveData.empireData[player][2])
             if roleExist:
-                print("role already exists!")
                 if roleExist in member.roles:
-                    print("member has role, passing")
                     pass
                 else:
-                    print("member did not have role, adding")
                     await member.add_roles(roleExist)
             else:
-                print("making new role")
                 role = await server.create_role(name=saveData.empireData[player][2], color=saveData.empireData[player][1])
                 await member.add_roles(role)
-                print("role added")
             for federation in saveData.fedData.keys():
                 if saveData.empireData[player][0] in saveData.fedData[federation]:
-                    print("player is also in federation!")
                     roleExist = get(server.roles, name=federation)
                     if roleExist:
-                        print("role already exists!")
                         if roleExist in member.roles:
-                            print("member already had role, passing")
                             pass
                         else:
-                            print("member did not have role, adding")
                             await member.add_roles(get(server.roles, name=federation))
                     else:
-                        print("making new federation role")
                         role = await server.create_role(name=federation)
                         await member.add_roles(role)
             if saveData.empireData[player][0] in saveData.council:
@@ -238,7 +211,6 @@ async def createChannels():
 
     server = client.get_guild(discGuild)
     for cat in server.categories:
-        print(cat.name)
         if cat.name == "Federations":
             category = cat
             break
@@ -279,32 +251,35 @@ async def observer():
     """looks at files in a directory and slects the latest file for parsing"""
     await client.wait_until_ready()
     while True:
-        print(names)
         if saveData.path != None:
             files = os.listdir(saveData.path)
             paths = [os.path.join(saveData.path, basename) for basename in files]
             latest = max(paths, key=os.path.getctime)
             #latest.replace("\\", "/")
-            print(f"\n Latest is {latest} \n")
             await saveData.unzip(latest)
-            print("unzipped!")
             await saveData.process()
-            print("processed")
             await assignRoles()
-            print("roles assigned!")
             await createChannels()
-            print("channels created!")
             await asyncio.sleep(10) # waits every 5 minutes
         else:
-            print("path is currently none \n")
             await asyncio.sleep(10)
 
 @client.command()
 async def iam(ctx, steamName):
     discID = ctx.message.author.id # defines the id of the sender
-    # need to check to make sure people don't screw up
     names[steamName] = discID
-    await ctx.send("Steam name applied!")
+    with open("user.json", "w") as f:
+        json.dump(names,f)
+    await ctx.send("Stellaris name applied!")
+
+@client.command()
+async def iamnot(ctx, steamName):
+    try:
+        names.pop(steamName, None)
+        with open("user.json", "w") as f:
+            json.dump(names,f)
+    except:
+        await ctx.send("Stellaris name removed!")
 
 @client.command()
 async def selectSave(ctx, directory):
@@ -320,6 +295,30 @@ async def selectSave(ctx, directory):
 async def victoryScreen(ctx):
     """would just display the victory screen as an embed"""
     pass
+
+@client.command()
+async def playerlist(ctx):
+    """lists steam names + discord names"""
+    base_string = ""
+    for item in names.keys():
+        username =ctx.guild.get_member(names[item]).nick
+        if username == None:
+            username = ctx.guild.get_member(names[item]).display_name
+        base_string += f"{item}: {username}\n\n"
+        emb = discord.Embed(description=base_string, color=0x00fffd)
+        emb.set_author(name="", icon_url="https://cdn.discordapp.com/avatars/790661954372239458/d75cfede1d3fd3f20abd71233bf47ec8.png?size=128")
+        await ctx.send(embed=emb)
+@client.command()
+async def help(ctx):
+    """lists all commands"""
+    message =   "!iam <stellaris name> - Adds your name to the database to be observed. Needs to be your name in stellaris and is your steam name unless you changed it \n " + \
+                "!iamnot <stellaris name> - Removes your stellaris name to the database to be observed. Needs to be your name in stellaris and is your steam name unless you changed it \n" + \
+                "!playerlist - Lists all the players added with both their discord name and stellaris name \n" + \
+                "!victoryScreen - Displays the victory screen for the latest save. Currently a work in progress and is non functional \n" + \
+                "!help - Displays this screen!"
+    emb = discord.Embed(description=message, color=0x39e600)
+    emb.set_author(name="Help Menu!", icon_url="https://cdn.discordapp.com/avatars/790661954372239458/d75cfede1d3fd3f20abd71233bf47ec8.png?size=128")
+    await ctx.send(embed=emb)
 
 if __name__ == "__main__":
     client.loop.create_task(observer())
