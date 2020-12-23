@@ -20,7 +20,7 @@ from zipfile import ZipFile
 #   implement channel creation for federations
 
 with open("token.json", "r") as foo:
-    TOKEN = json.loads(foo)
+    TOKEN = json.load(foo)
 intents = discord.Intents.default()
 intents.members = True
 client = commands.Bot(command_prefix='!', intents=intents) # command prefix is >>
@@ -31,15 +31,13 @@ if not os.path.exists("users.json"):
         data = {}
         json.dump(data,f)
         discGuild = data
-else:
-    with open("users.json", "r") as f:
-        names = json.load(f)
+with open("users.json", "r") as f:
+    names = json.load(f)
 discGuild = None
 
 class saveProcessing:
     def __init__(self):
         self.path = None
-        #self.saveFile = None#f"{self.path}/latest.sav"
         self.empireData = {}
         self.fedData = {}
         self.council = []
@@ -206,6 +204,20 @@ async def assignRoles():
                 else:
                     role = await server.create_role(name="Galactic Council")
                     await member.add_roles(role)
+    # checking if everyone who has a federation role should have that role
+    for federation in saveData.fedData.keys():
+        fedRole = get(server.roles, name=federation)
+        for member in fedRole.members: # fedRole.members returns a list of discord member objects
+            # get country number from discord user id
+            for stellarName in names.keys():
+                if names[stellarName] == member:
+                    countryNum = saveData.empireData[stellarName][0]
+                    if countryNum not in saveData.fedData[federation]:
+                        member.remove_roles(fedRole)
+                        break
+                    else:
+                        continue
+
 
 async def createChannels():
 
@@ -268,7 +280,7 @@ async def observer():
 async def iam(ctx, steamName):
     discID = ctx.message.author.id # defines the id of the sender
     names[steamName] = discID
-    with open("user.json", "w") as f:
+    with open("users.json", "w") as f:
         json.dump(names,f)
     await ctx.send("Stellaris name applied!")
 
@@ -276,11 +288,13 @@ async def iam(ctx, steamName):
 async def iamnot(ctx, steamName):
     try:
         names.pop(steamName, None)
-        with open("user.json", "w") as f:
+        with open("users.json", "w") as f:
             json.dump(names,f)
     except:
+        pass
+    finally:
         await ctx.send("Stellaris name removed!")
-
+        
 @client.command()
 async def selectSave(ctx, directory):
     """Takes the abosulte file path to the folder containing the save files of selected stellaris game"""
@@ -305,8 +319,8 @@ async def playerlist(ctx):
         if username == None:
             username = ctx.guild.get_member(names[item]).display_name
         base_string += f"{item}: {username}\n\n"
-        emb = discord.Embed(description=base_string, color=0x00fffd)
-        emb.set_author(name="", icon_url="https://cdn.discordapp.com/avatars/790661954372239458/d75cfede1d3fd3f20abd71233bf47ec8.png?size=128")
+        emb = discord.Embed(description=base_string+" ", color=0x00fffd)
+        emb.set_author(name="Active Player List", icon_url="https://cdn.discordapp.com/avatars/790661954372239458/d75cfede1d3fd3f20abd71233bf47ec8.png?size=128")
         await ctx.send(embed=emb)
 @client.command()
 async def help(ctx):
