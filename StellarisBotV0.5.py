@@ -319,9 +319,9 @@ async def playerlist(ctx):
         if username == None:
             username = ctx.guild.get_member(names[item]).display_name
         base_string += f"{item}: {username}\n\n"
-        emb = discord.Embed(description=base_string+" ", color=0x00fffd)
-        emb.set_author(name="Active Player List", icon_url="https://cdn.discordapp.com/avatars/790661954372239458/d75cfede1d3fd3f20abd71233bf47ec8.png?size=128")
-        await ctx.send(embed=emb)
+    emb = discord.Embed(description=base_string+" ", color=0x00fffd)
+    emb.set_author(name="Active Player List", icon_url="https://cdn.discordapp.com/avatars/790661954372239458/d75cfede1d3fd3f20abd71233bf47ec8.png?size=128")
+    await ctx.send(embed=emb)
 @client.command()
 async def help(ctx):
     """lists all commands"""
